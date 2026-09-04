@@ -103,6 +103,16 @@ The wizard will prompt you, in order:
 
 This project's own deployment answers **Anthropic** / **`claude-haiku-4-5`** here — shown as a concrete, working example, not a requirement.
 
+**Enable the gateway's OpenAI-compatible HTTP endpoint — required, found during a live redeploy.** Newer OpenClaw versions ship `gateway.http.endpoints.chatCompletions.enabled` defaulting to `false`, which disables the `/v1/chat/completions` HTTP endpoint. This backend's `main.py` depends on that endpoint entirely — it calls it directly over HTTP rather than using OpenClaw's native WebSocket protocol — so without enabling it, every `POST /ask` fails with a generic `OpenClaw gateway error (404): Not Found`, an error that reads like a routing or auth problem, not a disabled feature. Right after the wizard finishes, enable it and restart the gateway:
+
+```bash
+docker compose -f /opt/openclaw/docker-compose.yml run --rm openclaw-cli \
+  config set gateway.http.endpoints.chatCompletions.enabled true
+docker compose -f /opt/openclaw/docker-compose.yml restart openclaw-gateway
+```
+
+This default may change again in a future OpenClaw version — if a future redeploy hits an unexplained 404 from the gateway, verify directly with a `curl` test against `/v1/chat/completions` before assuming it's a routing or auth issue.
+
 `setup.sh` starts the gateway automatically via Docker Compose once the wizard finishes. Retrieve the gateway token afterward:
 
 ```bash
