@@ -41,7 +41,14 @@ CHUNK_ID_NAMESPACE = uuid.UUID("6f6f7263-6873-4964-8e6e-616d65737061")
 
 TAG_PATTERN = re.compile(r"</?[A-Z][\w.]*(?:\s+[^<>]*)?/?>")
 CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
-URL_MARKER_PATTERN = re.compile(r"\*\*URL:\*\*\s*(\S+)")
+FRONTMATTER_PATTERN = re.compile(
+    r"^---\n"
+    r"title:.*\n"
+    r"url:\s*(\S+)\n"
+    r"(?:description:.*\n)?"
+    r"---\n",
+    re.MULTILINE,
+)
 TOP_HEADING_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 SECTION_HEADING_PATTERN = re.compile(r"^(#{2,3})\s+(.+)$", re.MULTILINE)
 
@@ -90,14 +97,15 @@ def strip_component_tags(text: str) -> str:
 
 
 def split_into_pages(text: str) -> list[tuple[str, str]]:
-    """Split the corpus on `**URL:**` markers into (source_url, page_text) pairs."""
-    pieces = URL_MARKER_PATTERN.split(text)
-    # pieces = [preamble, url1, content1, url2, content2, ...]
+    """Split the corpus on YAML frontmatter blocks (`---` / title / url /
+    optional description / `---`) into (source_url, page_text) pairs."""
+    matches = list(FRONTMATTER_PATTERN.finditer(text))
     pages = []
-    for i in range(1, len(pieces), 2):
-        url = pieces[i].strip()
-        content = pieces[i + 1] if i + 1 < len(pieces) else ""
-        pages.append((url, content))
+    for i, match in enumerate(matches):
+        url = match.group(1).strip()
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        pages.append((url, text[start:end]))
     return pages
 
 

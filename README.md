@@ -112,7 +112,24 @@ curl http://localhost:18789   # expect the OpenClaw Control UI
 
 Save that token as `OPENCLAW_GATEWAY_TOKEN` in the `.env` file you created in step 3.
 
-### 6. Install the fastapi and mcp-server systemd services
+### 6. Sync `agent/SOUL.md` into OpenClaw's live workspace
+
+OpenClaw does **not** automatically use `agent/SOUL.md` from this repo. The agent reads its system prompt from a separate copy inside its own internal workspace directory, which starts out as OpenClaw's generic default and is never auto-synced from the repo — onboarding does not do this for you.
+
+**This matters because it's a silent failure, not an error you'd notice.** Skip this step and the system still runs and answers questions normally — `/health` is fine, `/ask` returns responses — just without any of this project's grounding/citation/abstention rules active. Nothing crashes, nothing logs a warning. This has bitten this deployment twice: once originally, and again on a second, independent redeploy for a different reason (a different OS user meant a different workspace path).
+
+1. Find the workspace path from the **onboarding wizard's own output** in step 5 above — look for the line starting `Workspace:`. It varies depending on which OS user OpenClaw was onboarded as (e.g. `/root/.openclaw/workspace/` vs. `/home/<user>/.openclaw/workspace/`) — always read the real path the wizard printed, never assume one.
+2. Copy the repo's system prompt into that workspace:
+   ```bash
+   cp agent/SOUL.md <workspace-path>/SOUL.md
+   ```
+3. Verify it landed correctly:
+   ```bash
+   diff agent/SOUL.md <workspace-path>/SOUL.md   # expect no output
+   cat <workspace-path>/SOUL.md                  # sanity-check the content
+   ```
+
+### 7. Install the fastapi and mcp-server systemd services
 
 ```bash
 cd ~/Grounded-Answer-Desk-Assignment
@@ -124,7 +141,7 @@ Both scripts template their `infra/systemd/*.service` file with the actual repo 
 
 **Why systemd, not just running `uvicorn`/the MCP server directly in a terminal:** running either process in a foreground SSH session means it dies the moment that session disconnects — there's no supervision, no restart on crash, and nothing brings it back after a VPS reboot without someone manually SSH-ing in again. systemd fixes all three: `fastapi.service` restarts on any exit (`Restart=always`) and `mcp-server.service` restarts on a crash (`Restart=on-failure`, 5s backoff), `enable` means both start automatically on boot, and `systemctl status/restart` plus `journalctl -u fastapi` / `-u mcp-server` give standard, always-available process management and logs — the same way any real production service is run, not a `nohup`/`screen`/`tmux` workaround tied to a specific terminal session.
 
-### 7. Register the MCP server with OpenClaw
+### 8. Register the MCP server with OpenClaw
 
 With `mcp-server` now running (previous step), register it as a tool source for the "main" agent:
 
@@ -136,18 +153,18 @@ docker compose -f /opt/openclaw/docker-compose.yml run --rm openclaw-cli mcp pro
 
 Use `host.docker.internal`, not `localhost` — the OpenClaw gateway runs in a Docker container with normal bridge networking, and `mcp-server` runs natively on the host, so `localhost:8001` from inside the container would not resolve to it. The `probe` command should report 4 tools (`search_kb`, `get_source`, `list_sections`, `get_related`). This step is idempotent — re-running `mcp add` against an already-registered server is safe.
 
-### 8. Populate the knowledge base
+### 9. Populate the knowledge base
 
 ```bash
 uv run python ingestion/ingest.py
 uv run python ingestion/verify.py
 ```
 
-`ingest.py` downloads the corpus, chunks it, embeds ~3,100 chunks, and populates the `anthropic_docs` Qdrant collection (it drops and recreates the collection each run, so it's always safe to re-run). `verify.py` should report a vector count in the 2,500-3,500 range.
+`ingest.py` downloads the corpus, chunks it, embeds ~3,500 chunks, and populates the `anthropic_docs` Qdrant collection (it drops and recreates the collection each run, so it's always safe to re-run). `verify.py` should report a vector count in the 2,500-3,500 range.
 
-Full ingestion, including first-time embedding model download (~550MB from HuggingFace) and processing ~3,100 chunks, completes in under 1 minute on a 2 vCPU/4GB VPS (benchmarked: 48 seconds, cold model cache).
+Full ingestion, including first-time embedding model download (~550MB from HuggingFace) and processing ~3,500 chunks, is embedding-bound and CPU-bound — expect on the order of **~24 minutes** (benchmarked on a Hetzner AX41 dedicated server, Ryzen 5 3600, 12 threads/62GB RAM, 6 CPU threads at ~90-100% each during embedding; upsert into Qdrant itself takes only seconds). An earlier "48 seconds" figure was documented for this step but did not hold up under this second, real measurement and was likely inaccurate rather than an artifact of weaker original hardware — treat it as retracted.
 
-### 9. Verify everything
+### 10. Verify everything
 
 ```bash
 curl http://localhost:8000/health

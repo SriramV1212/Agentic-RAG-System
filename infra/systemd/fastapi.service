@@ -7,7 +7,7 @@ Description=FastAPI app
 After=network.target
 
 [Service]
-User=sriram
+User=__USER__
 WorkingDirectory=__WORKDIR__
 ExecStart=__UV_BIN__ run uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always

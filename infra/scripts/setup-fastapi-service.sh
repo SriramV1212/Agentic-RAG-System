@@ -15,14 +15,15 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 UV_BIN="$(command -v uv)"
+RUN_USER="$(whoami)"
 
 if [ -z "$UV_BIN" ]; then
   echo "ERROR: uv not found on PATH. Install uv first (see README)." >&2
   exit 1
 fi
 
-echo "Templating fastapi.service (WorkingDirectory=${REPO_ROOT}, uv=${UV_BIN}) ..."
-sed "s|__WORKDIR__|${REPO_ROOT}|g; s|__UV_BIN__|${UV_BIN}|g" \
+echo "Templating fastapi.service (User=${RUN_USER}, WorkingDirectory=${REPO_ROOT}, uv=${UV_BIN}) ..."
+sed "s|__WORKDIR__|${REPO_ROOT}|g; s|__UV_BIN__|${UV_BIN}|g; s|__USER__|${RUN_USER}|g" \
   "${REPO_ROOT}/infra/systemd/fastapi.service" | sudo tee /etc/systemd/system/fastapi.service > /dev/null
 
 echo "Reloading systemd and enabling fastapi ..."
